@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   isRouteErrorResponse,
   Links,
@@ -5,25 +6,47 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useNavigate,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
-  },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+    rel: "icon",
+    type: "image/png",
+    href: "/favicon.png",
   },
 ];
 
+export const meta: Route.MetaFunction = () => {
+  return [
+    { title: "Hey there!" },
+    { name: "description", content: "Thanks for visiting!" },
+  ];
+};
+
 export function Layout({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const updateFavicon = () => {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const favicon = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+      if (favicon) {
+        favicon.href = isDark ? "/logo_light.png" : "/logo_dark.png";
+      }
+    };
+
+    updateFavicon();
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", updateFavicon);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateFavicon);
+    };
+  }, []);
+
   return (
     <html lang="en">
       <head>
@@ -46,6 +69,17 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  const navigate = useNavigate();
+  const hasNavigated = useRef(false);
+
+  // Redirect to home on 404 errors
+  useEffect(() => {
+    if (isRouteErrorResponse(error) && error.status === 404 && !hasNavigated.current) {
+      hasNavigated.current = true;
+      navigate("/", { replace: true });
+    }
+  }, [error, navigate]);
+
   let message = "Oops!";
   let details = "An unexpected error occurred.";
   let stack: string | undefined;
@@ -59,6 +93,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   } else if (import.meta.env.DEV && error && error instanceof Error) {
     details = error.message;
     stack = error.stack;
+  }
+
+  // Don't render anything for 404s since we're redirecting
+  if (isRouteErrorResponse(error) && error.status === 404) {
+    return null;
   }
 
   return (
