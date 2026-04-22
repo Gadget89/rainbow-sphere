@@ -72,9 +72,9 @@ export default function PlasmaSphere() {
 
     // ── params ──────────────────────────────────────────────────
     const params = {
-      timeScale: 1.2,
-      rotationSpeedX: 0.002,
-      rotationSpeedY: 0.005,
+      timeScale: 1.5,
+      rotationSpeedX: 0.004,
+      rotationSpeedY: 0.01,
       plasmaScale: 0.2,
       plasmaBrightness: 1.31,
       voidThreshold: 0.09,
@@ -117,7 +117,7 @@ export default function PlasmaSphere() {
     scene.add(mainGroup);
 
     // ── light ───────────────────────────────────────────────────
-    mainGroup.add(new THREE.PointLight(0x0088ff, 2.0, 10));
+    mainGroup.add(new THREE.PointLight(0xffffff, 2.0, 10));
 
     // ── shell ───────────────────────────────────────────────────
     const shellVert = `
@@ -176,6 +176,9 @@ export default function PlasmaSphere() {
         uScale: { value: params.plasmaScale },
         uBrightness: { value: params.plasmaBrightness },
         uThreshold: { value: params.voidThreshold },
+        uColorDeep: { value: new THREE.Color(params.colorDeep) },
+        uColorMid: { value: new THREE.Color(params.colorMid) },
+        uColorBright: { value: new THREE.Color(params.colorBright) },
       },
       vertexShader: `
         varying vec3 vPosition;
@@ -194,10 +197,14 @@ export default function PlasmaSphere() {
         uniform float uScale;
         uniform float uBrightness;
         uniform float uThreshold;
+        uniform vec3 uColorDeep;
+        uniform vec3 uColorMid;
+        uniform vec3 uColorBright;
         varying vec3 vPosition;
         varying vec3 vNormal;
         varying vec3 vViewPosition;
         ${noiseFunctions}
+        // Rainbow color cycling enabled
 
         vec3 hsv2rgb(vec3 c) {
           vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -216,17 +223,24 @@ export default function PlasmaSphere() {
           float t = (density + 0.4) * 0.8;
           float alpha = smoothstep(uThreshold, 0.7, t);
 
-          // Rainbow color cycling based on time and position
-          float hue = fract(uTime * 0.1 + density * 0.5);
-          vec3 color = hsv2rgb(vec3(hue, 0.8, 1.0));
-
-          // Add white highlights at high density
+          // Rainbow cycling - cycle through full spectrum (slower for smoother transitions)
+          float hue = fract(uTime * 0.3);
+          
+          vec3 colorDeep = hsv2rgb(vec3(hue, 1.0, 0.3));
+          vec3 colorMid = hsv2rgb(vec3(fract(hue + 0.33), 1.0, 0.6));
+          vec3 colorBright = hsv2rgb(vec3(fract(hue + 0.66), 1.0, 0.8));
           vec3 cWhite = vec3(1.0);
+          
+          // Original vibrant color mixing with smoothstep transitions
+          vec3 color = mix(colorDeep, colorMid, smoothstep(uThreshold, 0.5, t));
+          color = mix(color, colorBright, smoothstep(0.5, 0.8, t));
           color = mix(color, cWhite, smoothstep(0.8, 1.0, t));
 
           float facing = dot(normalize(vNormal), normalize(vViewPosition));
           float depthFactor = (facing + 1.0) * 0.5;
-          gl_FragColor = vec4(color * uBrightness, alpha * (0.02 + 0.98 * depthFactor));
+          float finalAlpha = alpha * (0.02 + 0.98 * depthFactor);
+          
+          gl_FragColor = vec4(color * uBrightness, finalAlpha);
         }
       `,
       transparent: true,
@@ -296,17 +310,17 @@ export default function PlasmaSphere() {
     mainGroup.add(new THREE.Points(pGeo, pMat));
 
     // ── animation loop ───────────────────────────────────────────
-    const timer = new THREE.Timer();
+    const startTime = Date.now();
     let rafId: number | null = null;
 
     function animate() {
       rafId = requestAnimationFrame(animate);
-      const t = timer.getElapsed();
+      const t = (Date.now() - startTime) / 1000;
 
       plasmaMat.uniforms.uTime.value = t * params.timeScale;
       pMat.uniforms.uTime.value = t;
 
-      plasmaMesh.rotation.y = t * 0.08;
+      plasmaMesh.rotation.y = t * 0.15;
       mainGroup.rotation.x += params.rotationSpeedX;
       mainGroup.rotation.y += params.rotationSpeedY;
 
